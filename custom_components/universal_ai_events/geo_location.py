@@ -4,7 +4,11 @@ import logging
 import json
 import math
 
-from homeassistant.components.geo_location import GeolocationEntity
+try:
+    from homeassistant.components.geo_location import GeolocationEntity
+except ImportError:
+    from homeassistant.components.geolocation import GeolocationEntity
+
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 

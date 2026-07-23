@@ -26,7 +26,7 @@ class UniversalEventsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "perplexity": "Perplexity API (Kostenpflichtig / Hohe Präzision)"
             }),
             vol.Required("api_key"): str,
-            vol.Required("location", default="Gerolzhofen"): str,
+            vol.Required("location", default="Berlin"): str,
             vol.Required("country", default="Germany"): str,
             vol.Required("radius_km", default=30): int,
             vol.Required("update_hours", default=24): int,

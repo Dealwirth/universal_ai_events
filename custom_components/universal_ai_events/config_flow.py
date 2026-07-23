@@ -1,11 +1,14 @@
-"""Config flow for Universal AI Event Finder."""
+"""Config flow for Universal AI Event Finder (Gemini Only)."""
+from __future__ import annotations
+
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 
 DOMAIN = "universal_ai_events"
 
-class UniversalEventsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow."""
+class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle a config flow for Universal AI Event Finder."""
 
     VERSION = 1
 
@@ -14,26 +17,23 @@ class UniversalEventsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            return self.async_create_entry(
-                title=f"Events: {user_input['location']} ({user_input['radius_km']}km)", 
-                data=user_input
-            )
+            # Bereinige den API-Key von versehentlichen Zeichen
+            clean_key = user_input.get("api_key", "").strip()
+            if not clean_key:
+                errors["base"] = "invalid_api_key"
+            else:
+                user_input["api_key"] = clean_key
+                return self.async_create_entry(
+                    title=f"Events {user_input.get('location', 'Local')}",
+                    data=user_input
+                )
 
         data_schema = vol.Schema({
-            vol.Required("api_provider", default="groq"): vol.In({
-                "groq": "Groq API (Kostenlos & extrem schnell)",
-                "gemini": "Google Gemini API (Kostenloser Tier)",
-                "perplexity": "Perplexity API (Kostenpflichtig / Hohe Präzision)"
-            }),
             vol.Required("api_key"): str,
-            vol.Required("location", default="Berlin"): str,
-            vol.Required("country", default="Germany"): str,
-            vol.Required("radius_km", default=30): int,
-            vol.Required("update_hours", default=24): int,
-            vol.Required(
-                "criteria", 
-                default="Weinfest, Kirchweih, Kerwa, Open Air, Rock-Konzert, Märkte, Fest, Festival"
-            ): str,
+            vol.Required("location", default="Gerolzhofen"): str,
+            vol.Optional("country", default="Germany"): str,
+            vol.Optional("radius_km", default=30): int,
+            vol.Optional("criteria", default="Festival, Konzert, Markt, Kirchweih, Weinfest"): str,
             vol.Optional("language", default="Deutsch"): str,
         })
 

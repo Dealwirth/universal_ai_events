@@ -19,13 +19,11 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 ## 🚀 Installation
 
-### Option 1: Über My Home Assistant (Empfohlen)
+### Option 1: Direkt zu HACS hinzufügen (Empfohlen)
 
-Klicke einfach auf diesen Button, um das Repository direkt in deinem Home Assistant zu öffnen:
+Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HACS einzubinden:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=DEIN_GITHUB_USERNAME&repository=universal_ai_events&category=integration)
-
-*(Ersetze `DEIN_GITHUB_USERNAME` in der URL durch deinen echten GitHub-Namen)*
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration)
 
 ---
 
@@ -33,8 +31,8 @@ Klicke einfach auf diesen Button, um das Repository direkt in deinem Home Assist
 
 1. Öffne **HACS** in Home Assistant.
 2. Klicke oben rechts auf die **3 Punkte** ➔ **Benutzerdefinierte Repositories**.
-3. Füge deine Repository-URL ein:
-   `https://github.com/DEIN_GITHUB_USERNAME/universal_ai_events`
+3. Füge folgende Repository-URL ein:
+   `https://github.com/Dealwirth/universal_ai_events`
 4. Wähle als Kategorie **Integration** aus und klicke auf **Hinzufügen**.
 5. Klicke auf **Herunterladen** und starte Home Assistant neu.
 
@@ -46,7 +44,7 @@ Klicke einfach auf diesen Button, um das Repository direkt in deinem Home Assist
 2. Suche nach **Universal AI Event Finder**.
 3. Gib folgende Daten ein:
    * **KI-Anbieter:** `Groq` (Kostenlos) oder `Gemini`
-   * **API Key:** Dein kostenloser Key (z. B. von [Groq Console](https://console.groq.com/))
+   * **API Key:** Dein kostenloser Key
    * **Ort & Land:** z. B. `Gerolzhofen`, `Germany`
    * **Radius:** z. B. `30` (km)
    * **Kriterien:** `Weinfest, Kirchweih, Rock, Open Air, Markt`
@@ -55,7 +53,7 @@ Klicke einfach auf diesen Button, um das Repository direkt in deinem Home Assist
 
 ## 🗺️ Auf dem Dashboard anzeigen
 
-Füge diese Karte zu deinem Lovelace-Dashboard hinzu:
+Füge diese Karte zu deinem Dashboard hinzu:
 
 ```yaml
 type: map

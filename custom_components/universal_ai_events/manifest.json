@@ -3,9 +3,9 @@
   "name": "Universal AI Event Finder",
   "codeowners": ["@Dealwirth"],
   "config_flow": true,
-  "documentation": "[https://github.com/Dealwirth/universal_ai_events](https://github.com/Dealwirth/universal_ai_events)",
+  "documentation": "https://github.com/Dealwirth/universal_ai_events",
   "iot_class": "cloud_polling",
-  "issue_tracker": "[https://github.com/Dealwirth/universal_ai_events/issues](https://github.com/Dealwirth/universal_ai_events/issues)",
+  "issue_tracker": "https://github.com/Dealwirth/universal_ai_events/issues",
   "requirements": [],
   "version": "1.0.0"
 }

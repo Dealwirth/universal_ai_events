@@ -17,8 +17,8 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 SCAN_INTERVAL = timedelta(hours=12)
 
-# WICHTIG: Mit 'models/' im Pfad!
-API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+# Endpoint konfiguriert für Gemini 1.5 Flash
+API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 
 async def async_setup_entry(
@@ -56,11 +56,11 @@ class UniversalEventSensor(SensorEntity):
             "events": self._events_list,
             "location": self._config.get("location"),
             "radius_km": self._config.get("radius_km"),
-            "provider_used": "Google Gemini 2.0 Flash (Live Grounding)",
+            "provider_used": "Google Gemini 1.5 Flash",
         }
 
     async def async_update(self) -> None:
-        """Fetch events dynamically via Google Gemini with Web Grounding."""
+        """Fetch events dynamically via Google Gemini."""
         _LOGGER.info("Gestartete KI-Event-Suche für %s...", self._config.get("location"))
         
         api_key = str(self._config.get("api_key", "")).strip()

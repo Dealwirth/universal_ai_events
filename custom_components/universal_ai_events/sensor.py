@@ -59,9 +59,17 @@ class UniversalEventSensor(SensorEntity):
         """Fetch events dynamically via Google Gemini with Web Grounding."""
         _LOGGER.info("Gezielte KI-Event-Suche via Google Gemini wird gestartet...")
         
-        # 1. API Key strikt bereinigen (entfernt Klammern [], (), Leerzeichen, Anführungszeichen)
         raw_key = str(self._config.get("api_key", ""))
-        api_key = re.sub(r"[\[\]\(\)\"'\s]", "", raw_key).strip()
+        
+        # Extremer Schutz-Filter: Falls die URL oder Markdown im Key gelandet ist, schneiden wir sie ab
+        # Ein echter Gemini API Key besteht nur aus Alphanumerischen Zeichen, Bindestrichen und Unterstrichen (beginnt meist mit AIzaSy...)
+        cleaned_key = re.sub(r"https?://\S+", "", raw_key) # Entfernt URLs
+        cleaned_key = re.sub(r"[\[\]\(\)\"'\s=]", "", cleaned_key) # Entfernt Klammern, Anführungszeichen, Gleichheitszeichen
+        
+        # Falls der Key durch falsches Einfügen mit "key=" getrennt war:
+        if "key=" in raw_key:
+            cleaned_key = raw_key.split("key=")[-1]
+            cleaned_key = re.sub(r"[\[\]\(\)\"'\s]", "", cleaned_key)
 
         location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
@@ -69,8 +77,8 @@ class UniversalEventSensor(SensorEntity):
         criteria = self._config.get("criteria", "Festival, Konzert, Markt, Kirchweih, Weinfest")
         lang = self._config.get("language", "Deutsch")
 
-        if not api_key:
-            _LOGGER.error("Universal AI Event Finder: Kein gültiger Gemini API-Key hinterlegt!")
+        if not cleaned_key or len(cleaned_key) < 10:
+            _LOGGER.error("Universal AI Event Finder: Ungültiger oder beschädigter Gemini API-Key! Extrahierter Key war: '%s'", cleaned_key)
             return
 
         prompt = (
@@ -86,16 +94,17 @@ class UniversalEventSensor(SensorEntity):
         session = async_get_clientsession(self.hass)
 
         try:
-            # Reiner Endpoint ohne Klammern-Gefahr
-            endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){api_key}"
+            # Feste Basis-URL ohne dynamische Manipulation
+            endpoint = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)"
+            params = {"key": cleaned_key}
             
             payload = {
                 "contents": [{"parts": [{"text": prompt}]}],
-                # Google Search Retrieval aktiviert den Zugriff auf das Live-Web
                 "tools": [{"google_search_retrieval": {}}]
             }
             
-            async with session.post(endpoint, json=payload, timeout=45) as r:
+            # Wir übergeben den Key sauber als URL-Parameter 'params', um URL-Formatierungsfehler zu vermeiden
+            async with session.post(endpoint, params=params, json=payload, timeout=45) as r:
                 _LOGGER.info("Gemini HTTP Status-Code: %s", r.status)
                 res_json = await r.json()
                 
@@ -114,7 +123,7 @@ class UniversalEventSensor(SensorEntity):
             _LOGGER.error("Netzwerk- oder API-Fehler bei Gemini: %s", err)
             return
 
-        # 2. JSON-Array aus dem Antworttext filtern
+        # JSON aus der KI-Antwort extrahieren
         try:
             start = raw_response.find("[")
             end = raw_response.rfind("]") + 1

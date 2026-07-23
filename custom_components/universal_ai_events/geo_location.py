@@ -1,44 +1,49 @@
 """Support for Geolocation entities for Local Events worldwide."""
+from __future__ import annotations
+
 from datetime import timedelta
-import logging
 import json
+import logging
 import math
 
-try:
-    from homeassistant.components.geo_location import GeolocationEntity
-except ImportError:
-    from homeassistant.components.geolocation import GeolocationEntity
+import aiohttp
 
-from homeassistant.helpers.event import async_track_time_interval
+# Offizieller, robuster Import für GeolocationEntity in Home Assistant
+from homeassistant.components.geo_location import GeolocationEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
 
-async def async_setup_entry(hass, entry, async_add_entities):
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities,
+) -> None:
     """Set up the event entities from a config entry."""
     config = entry.data
     updater = UniversalEventDataUpdater(hass, async_add_entities, config)
     
+    # Erstes Update ausführen
     await updater.async_update()
-    
-    interval = timedelta(hours=config.get("update_hours", 24))
-    async_track_time_interval(hass, updater.async_update, interval)
 
 
 class UniversalEventDataUpdater:
     """Class to manage fetching event data globally."""
 
-    def __init__(self, hass, async_add_entities, config):
+    def __init__(self, hass: HomeAssistant, async_add_entities, config: dict):
         self.hass = hass
         self.async_add_entities = async_add_entities
         self.config = config
-        self.entities = {}
+        self.entities: dict[str, UniversalEventEntity] = {}
         self.center_lat = 52.5200
         self.center_lon = 13.4050
 
-    async def _geocode_location(self, session, location, country):
+    async def _geocode_location(self, session: aiohttp.ClientSession, location: str, country: str):
         """Find center coordinates globally using Nominatim/OpenStreetMap."""
         try:
             url = f"https://nominatim.openstreetmap.org/search?q={location},{country}&format=json&limit=1"
@@ -51,7 +56,7 @@ class UniversalEventDataUpdater:
             _LOGGER.warning("Geocoding failed, falling back to defaults: %s", e)
         return 52.5200, 13.4050
 
-    async def async_update(self, _=None):
+    async def async_update(self, _=None) -> None:
         """Fetch events dynamically via chosen AI provider."""
         _LOGGER.info("Fetching events globally via AI...")
         
@@ -108,7 +113,7 @@ class UniversalEventDataUpdater:
                     res_json = await r.json()
                     raw_response = res_json["choices"][0]["message"]["content"]
         except Exception as err:
-            _LOGGER.error("API error for %s: %s", provider, err)
+            _LOGGER.error("API error for provider %s: %s", provider, err)
             return
 
         if not raw_response:
@@ -135,7 +140,7 @@ class UniversalEventDataUpdater:
                     ev["longitude"] = lon
 
                     if event_id not in self.entities:
-                        entity = UniversalEventEntity(ev, self.center_lat, self.center_lon)
+                        entity = UniversalEventEntity(event_id, ev, self.center_lat, self.center_lon)
                         self.entities[event_id] = entity
                         new_entities.append(entity)
                     else:
@@ -151,12 +156,18 @@ class UniversalEventDataUpdater:
 class UniversalEventEntity(GeolocationEntity):
     """Representation of a global event entity."""
 
-    def __init__(self, data, center_lat, center_lon):
+    def __init__(self, event_id: str, data: dict, center_lat: float, center_lon: float):
+        self._event_id = event_id
         self.center_lat = center_lat
         self.center_lon = center_lon
         self.update_data(data)
 
-    def update_data(self, data):
+    @property
+    def unique_id(self) -> str:
+        """Return a unique ID for this entity."""
+        return f"universal_event_{self._event_id}"
+
+    def update_data(self, data: dict):
         self._attr_name = f"{data.get('title')} ({data.get('date')})"
         self._attr_latitude = float(data.get("latitude", self.center_lat))
         self._attr_longitude = float(data.get("longitude", self.center_lon))
@@ -175,7 +186,7 @@ class UniversalEventEntity(GeolocationEntity):
             "Entfernung_km": self._attr_distance,
         }
 
-    def _get_icon(self, text):
+    def _get_icon(self, text: str) -> str:
         t = text.lower()
         if any(w in t for w in ["wein", "wine"]): return "mdi:wine"
         if any(w in t for w in ["rock", "konzert", "concert", "music"]): return "mdi:guitar-electric"
@@ -183,7 +194,7 @@ class UniversalEventEntity(GeolocationEntity):
         if any(w in t for w in ["market", "markt"]): return "mdi:store"
         return "mdi:calendar-star"
 
-    def _calc_distance(self, lat, lon):
+    def _calc_distance(self, lat: float, lon: float) -> float:
         dlat = math.radians(lat - self.center_lat)
         dlon = math.radians(lon - self.center_lon)
         a = math.sin(dlat/2)**2 + math.cos(math.radians(self.center_lat)) * math.cos(math.radians(lat)) * math.sin(dlon/2)**2

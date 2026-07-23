@@ -1,4 +1,4 @@
-"""Support for Universal AI Events sensor."""
+"""Support for Universal AI Events sensor with Google Gemini."""
 from __future__ import annotations
 
 from datetime import timedelta
@@ -13,8 +13,6 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
-
-# Automatische Aktualisierung alle 12 Stunden
 SCAN_INTERVAL = timedelta(hours=12)
 
 
@@ -36,7 +34,11 @@ class UniversalEventSensor(SensorEntity):
         self.hass = hass
         self._entry = entry
         self._config = config
-        self._attr_name = f"Events {config.get('location', 'Local')}"
+        
+        # Generiert einen festen Slug als Entity Name
+        loc_slug = config.get("location", "gerolzhofen").lower().replace(" ", "_")
+        self.entity_id = f"sensor.events_{loc_slug}"
+        self._attr_name = f"Events {config.get('location', 'Gerolzhofen')}"
         self._attr_unique_id = f"ai_events_{entry.entry_id}"
         self._attr_icon = "mdi:calendar-search"
         self._attr_native_value = 0
@@ -54,15 +56,15 @@ class UniversalEventSensor(SensorEntity):
         }
 
     async def async_update(self) -> None:
-        """Fetch events dynamically via chosen AI provider."""
+        """Fetch events dynamically via Google Gemini with Web Grounding."""
         _LOGGER.info("Starting AI Event search...")
         
-        provider = self._config.get("api_provider", "groq")
+        provider = self._config.get("api_provider", "gemini")
         api_key = str(self._config.get("api_key", "")).strip()
         location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
         radius = self._config.get("radius_km", 30)
-        criteria = self._config.get("criteria", "Festival, Konzert, Markt, Kirchweih, Fest")
+        criteria = self._config.get("criteria", "Festival, Konzert, Markt, Kirchweih, Weinfest")
         lang = self._config.get("language", "Deutsch")
 
         if not api_key:
@@ -70,73 +72,47 @@ class UniversalEventSensor(SensorEntity):
             return
 
         prompt = (
-            f"Suche nach öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
+            f"Durchsuche das Internet nach öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
             f"im Umkreis von {radius} km um {location} ({country}).\n"
             f"Kriterien/Kategorien: {criteria}.\n"
             f"Antworte ausschließlich auf {lang}.\n"
             "Gib NUR ein valides JSON-Array von Objekten zurück. Kein Markdown (keine ```json Tags).\n"
             "Jedes Objekt MUSS folgende Felder enthalten:\n"
-            "id (eindeutiger String), title, date, time, location_name, city, category, description, price, url."
+            "id, title, date, time, location_name, city, category, description, price, url."
         )
 
         session = async_get_clientsession(self.hass)
         raw_response = None
 
         try:
-            if provider == "groq":
-                # Echter, sauberer URL-String OHNE Markdown-Klammern
-                endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
+            if provider == "gemini":
+                # Saubere API-URL ohne Klammern oder Anführungszeichen-Salat
+                clean_key = api_key.replace("[", "").replace("]", "").replace("(", "").replace(")", "").strip()
+                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){clean_key}"
+                
                 payload = {
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "user", "content": prompt}]
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    # Aktiviert die Live-Google-Suche
+                    "tools": [{"google_search_retrieval": {}}]
                 }
-                async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Groq HTTP Status: %s", r.status)
-                    res_json = await r.json()
-                    if r.status != 200:
-                        _LOGGER.error("Groq API Fehler (Status %s): %s", r.status, res_json)
-                        return
-                    raw_response = res_json["choices"][0]["message"]["content"]
-
-            elif provider == "gemini":
-                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
-                payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                async with session.post(endpoint, json=payload, timeout=30) as r:
+                
+                async with session.post(endpoint, json=payload, timeout=45) as r:
                     _LOGGER.info("Gemini HTTP Status: %s", r.status)
                     res_json = await r.json()
+                    
                     if r.status != 200:
                         _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
                         return
+                    
+                    # Antwort extrahieren
                     raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-
-            elif provider == "perplexity":
-                endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-                payload = {
-                    "model": "sonar",
-                    "messages": [{"role": "user", "content": prompt}]
-                }
-                async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Perplexity HTTP Status: %s", r.status)
-                    res_json = await r.json()
-                    if r.status != 200:
-                        _LOGGER.error("Perplexity API Fehler (Status %s): %s", r.status, res_json)
-                        return
-                    raw_response = res_json["choices"][0]["message"]["content"]
 
         except Exception as err:
             _LOGGER.error("Netzwerk-/API-Fehler bei %s: %s", provider, err)
             return
 
         if not raw_response:
-            _LOGGER.warning("Keine Antwort von der KI erhalten.")
+            _LOGGER.warning("Keine Antwort von Gemini erhalten.")
             return
 
         try:
@@ -148,6 +124,6 @@ class UniversalEventSensor(SensorEntity):
                 self._attr_native_value = len(self._events_list)
                 _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
             else:
-                _LOGGER.error("Kein gültiges JSON-Array in KI-Antwort gefunden: %s", raw_response[:200])
+                _LOGGER.error("Kein gültiges JSON-Array in Antwort gefunden: %s", raw_response[:200])
         except Exception as e:
             _LOGGER.error("JSON Parse Fehler: %s", e)

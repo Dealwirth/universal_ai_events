@@ -5,6 +5,7 @@ from datetime import timedelta
 import json
 import logging
 import re
+from yarl import URL
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -52,24 +53,18 @@ class UniversalEventSensor(SensorEntity):
             "events": self._events_list,
             "location": self._config.get("location"),
             "radius_km": self._config.get("radius_km"),
-            "provider_used": "Google Gemini (Live Search)",
+            "provider_used": "Google Gemini 2.0 Flash (Live Grounding)",
         }
 
     async def async_update(self) -> None:
         """Fetch events dynamically via Google Gemini with Web Grounding."""
-        _LOGGER.info("Gezielte KI-Event-Suche via Google Gemini wird gestartet...")
+        _LOGGER.info("Gestarte KI-Event-Suche für %s...", self._config.get("location"))
         
-        raw_key = str(self._config.get("api_key", ""))
-        
-        # Extremer Schutz-Filter: Falls die URL oder Markdown im Key gelandet ist, schneiden wir sie ab
-        # Ein echter Gemini API Key besteht nur aus Alphanumerischen Zeichen, Bindestrichen und Unterstrichen (beginnt meist mit AIzaSy...)
-        cleaned_key = re.sub(r"https?://\S+", "", raw_key) # Entfernt URLs
-        cleaned_key = re.sub(r"[\[\]\(\)\"'\s=]", "", cleaned_key) # Entfernt Klammern, Anführungszeichen, Gleichheitszeichen
-        
-        # Falls der Key durch falsches Einfügen mit "key=" getrennt war:
-        if "key=" in raw_key:
-            cleaned_key = raw_key.split("key=")[-1]
-            cleaned_key = re.sub(r"[\[\]\(\)\"'\s]", "", cleaned_key)
+        api_key = str(self._config.get("api_key", "")).strip()
+
+        if not api_key:
+            _LOGGER.error("Kein API Key vorhanden.")
+            return
 
         location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
@@ -77,62 +72,65 @@ class UniversalEventSensor(SensorEntity):
         criteria = self._config.get("criteria", "Festival, Konzert, Markt, Kirchweih, Weinfest")
         lang = self._config.get("language", "Deutsch")
 
-        if not cleaned_key or len(cleaned_key) < 10:
-            _LOGGER.error("Universal AI Event Finder: Ungültiger oder beschädigter Gemini API-Key! Extrahierter Key war: '%s'", cleaned_key)
-            return
-
         prompt = (
             f"Durchsuche das Internet nach aktuellen öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
             f"im Umkreis von {radius} km um {location} ({country}).\n"
             f"Kriterien/Kategorien: {criteria}.\n"
             f"Antworte ausschließlich auf {lang}.\n"
-            "Gib NUR ein valides JSON-Array von Objekten zurück. Verwende keinerlei Markdown-Formatierung wie ```json.\n"
+            "Gib NUR ein valides JSON-Array von Objekten zurück.\n"
             "Jedes Objekt MUSS folgende Felder haben:\n"
             "id, title, date, time, location_name, city, category, description, price, url."
         )
 
         session = async_get_clientsession(self.hass)
 
+        # Sichere URL-Generierung via yarl.URL (verhindert Formatierungsfehler)
+        target_url = URL("[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)").with_query({"key": api_key})
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "tools": [{"google_search_retrieval": {}}]
+        }
+
         try:
-            # Feste Basis-URL ohne dynamische Manipulation
-            endpoint = "[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)"
-            params = {"key": cleaned_key}
-            
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "tools": [{"google_search_retrieval": {}}]
-            }
-            
-            # Wir übergeben den Key sauber als URL-Parameter 'params', um URL-Formatierungsfehler zu vermeiden
-            async with session.post(endpoint, params=params, json=payload, timeout=45) as r:
-                _LOGGER.info("Gemini HTTP Status-Code: %s", r.status)
-                res_json = await r.json()
-                
+            async with session.post(target_url, json=payload, timeout=45) as r:
                 if r.status != 200:
-                    _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
+                    err_body = await r.text()
+                    _LOGGER.error("Gemini API HTTP Fehler (%s): %s", r.status, err_body)
                     return
                 
+                res_json = await r.json()
                 candidates = res_json.get("candidates", [])
+                
                 if not candidates:
-                    _LOGGER.warning("Gemini hat keine Treffer/Antworten geliefert.")
+                    _LOGGER.warning("Gemini hat keine Daten geliefert.")
                     return
-                    
+
                 raw_response = candidates[0]["content"]["parts"][0]["text"]
 
         except Exception as err:
-            _LOGGER.error("Netzwerk- oder API-Fehler bei Gemini: %s", err)
+            _LOGGER.error("Netzwerkfehler beim Aufrufen von Gemini: %s", err)
             return
 
-        # JSON aus der KI-Antwort extrahieren
+        # Extrem sicherer JSON-Parser
         try:
-            start = raw_response.find("[")
-            end = raw_response.rfind("]") + 1
+            # Entfernt evtl. mitgelieferte Markdown-Tags wie ```json ... ```
+            clean_text = re.sub(r"```(?:json)?", "", raw_response).strip()
+            
+            start = clean_text.find("[")
+            end = clean_text.rfind("]") + 1
+            
             if start != -1 and end > start:
-                clean_json = raw_response[start:end]
-                self._events_list = json.loads(clean_json)
-                self._attr_native_value = len(self._events_list)
-                _LOGGER.info("Erfolgreich %s Events für %s geladen!", len(self._events_list), location)
+                json_str = clean_text[start:end]
+                parsed_data = json.loads(json_str)
+                
+                if isinstance(parsed_data, list):
+                    self._events_list = parsed_data
+                    self._attr_native_value = len(self._events_list)
+                    _LOGGER.info("Erfolgreich %s Events für %s geladen!", len(self._events_list), location)
+                else:
+                    _LOGGER.error("Antwort war kein JSON-Array.")
             else:
-                _LOGGER.error("Kein JSON-Array in der Gemini-Antwort gefunden: %s", raw_response[:200])
+                _LOGGER.error("Keine gültige JSON-Struktur in KI-Antwort gefunden.")
         except Exception as e:
-            _LOGGER.error("JSON-Parse-Fehler: %s", e)
+            _LOGGER.error("Fehler beim Verarbeiten der Event-Daten: %s", e)

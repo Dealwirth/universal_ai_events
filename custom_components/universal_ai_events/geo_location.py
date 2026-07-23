@@ -3,17 +3,17 @@ from datetime import timedelta
 import logging
 import json
 import math
-import aiohttp
 
 from homeassistant.components.geo_location import GeolocationEntity
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up the event entities."""
+    """Set up the event entities from a config entry."""
     config = entry.data
     updater = UniversalEventDataUpdater(hass, async_add_entities, config)
     
@@ -70,78 +70,78 @@ class UniversalEventDataUpdater:
             "category, description, price, url."
         )
 
-        async with aiohttp.ClientSession() as session:
-            self.center_lat, self.center_lon = await self._geocode_location(session, location, country)
+        session = async_get_clientsession(self.hass)
+        self.center_lat, self.center_lon = await self._geocode_location(session, location, country)
 
-            raw_response = None
-            try:
-                if provider == "groq":
-                    endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
-                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                    payload = {
-                        "model": "llama-3.3-70b-versatile",
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
-                    async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                        res_json = await r.json()
-                        raw_response = res_json["choices"][0]["message"]["content"]
-                
-                elif provider == "gemini":
-                    endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
-                    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                    async with session.post(endpoint, json=payload, timeout=30) as r:
-                        res_json = await r.json()
-                        raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                        
-                elif provider == "perplexity":
-                    endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
-                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                    payload = {
-                        "model": "sonar",
-                        "messages": [{"role": "user", "content": prompt}]
-                    }
-                    async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                        res_json = await r.json()
-                        raw_response = res_json["choices"][0]["message"]["content"]
-            except Exception as err:
-                _LOGGER.error("API error for %s: %s", provider, err)
-                return
+        raw_response = None
+        try:
+            if provider == "groq":
+                endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    res_json = await r.json()
+                    raw_response = res_json["choices"][0]["message"]["content"]
+            
+            elif provider == "gemini":
+                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                async with session.post(endpoint, json=payload, timeout=30) as r:
+                    res_json = await r.json()
+                    raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                    
+            elif provider == "perplexity":
+                endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "sonar",
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    res_json = await r.json()
+                    raw_response = res_json["choices"][0]["message"]["content"]
+        except Exception as err:
+            _LOGGER.error("API error for %s: %s", provider, err)
+            return
 
-            if not raw_response:
-                return
+        if not raw_response:
+            return
 
-            try:
-                start = raw_response.find("[")
-                end = raw_response.rfind("]") + 1
-                if start != -1 and end != 0:
-                    clean_json = raw_response[start:end]
-                    events = json.loads(clean_json)
+        try:
+            start = raw_response.find("[")
+            end = raw_response.rfind("]") + 1
+            if start != -1 and end != 0:
+                clean_json = raw_response[start:end]
+                events = json.loads(clean_json)
 
-                    new_entities = []
-                    for ev in events:
-                        event_id = str(ev.get("id", ev.get("title")))
-                        
-                        lat = ev.get("latitude")
-                        lon = ev.get("longitude")
-                        if not lat or not lon:
-                            loc_str = f"{ev.get('location_name', '')} {ev.get('city', location)}"
-                            lat, lon = await self._geocode_location(session, loc_str, country)
+                new_entities = []
+                for ev in events:
+                    event_id = str(ev.get("id", ev.get("title")))
+                    
+                    lat = ev.get("latitude")
+                    lon = ev.get("longitude")
+                    if not lat or not lon:
+                        loc_str = f"{ev.get('location_name', '')} {ev.get('city', location)}"
+                        lat, lon = await self._geocode_location(session, loc_str, country)
 
-                        ev["latitude"] = lat
-                        ev["longitude"] = lon
+                    ev["latitude"] = lat
+                    ev["longitude"] = lon
 
-                        if event_id not in self.entities:
-                            entity = UniversalEventEntity(ev, self.center_lat, self.center_lon)
-                            self.entities[event_id] = entity
-                            new_entities.append(entity)
-                        else:
-                            self.entities[event_id].update_data(ev)
+                    if event_id not in self.entities:
+                        entity = UniversalEventEntity(ev, self.center_lat, self.center_lon)
+                        self.entities[event_id] = entity
+                        new_entities.append(entity)
+                    else:
+                        self.entities[event_id].update_data(ev)
 
-                    if new_entities:
-                        self.async_add_entities(new_entities)
+                if new_entities:
+                    self.async_add_entities(new_entities)
 
-            except Exception as e:
-                _LOGGER.error("Failed to parse AI response JSON: %s", e)
+        except Exception as e:
+            _LOGGER.error("Failed to parse AI response JSON: %s", e)
 
 
 class UniversalEventEntity(GeolocationEntity):

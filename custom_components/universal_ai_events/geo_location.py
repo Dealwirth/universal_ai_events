@@ -32,7 +32,6 @@ class UniversalEventDataUpdater:
         self.async_add_entities = async_add_entities
         self.config = config
         self.entities = {}
-        # Default Fallback: Berlin, Germany
         self.center_lat = 52.5200
         self.center_lon = 13.4050
 
@@ -73,7 +72,6 @@ class UniversalEventDataUpdater:
         )
 
         async with aiohttp.ClientSession() as session:
-            # Geocode center location
             self.center_lat, self.center_lon = await self._geocode_location(session, location, country)
 
             raw_response = None

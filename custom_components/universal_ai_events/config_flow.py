@@ -11,7 +11,8 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 
-API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+# WICHTIG: Mit 'models/' im Pfad!
+API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -29,8 +30,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             session = async_get_clientsession(self.hass)
             test_url = URL(API_ENDPOINT).with_query({"key": clean_key})
             
+            # Minimaler Test OHNE Web-Grounding, um Quota zu sparen
+            payload = {
+                "contents": [{"parts": [{"text": "Hi"}]}]
+            }
+
             try:
-                payload = {"contents": [{"parts": [{"text": "Ping"}]}]}
                 async with session.post(test_url, json=payload, timeout=15) as resp:
                     if resp.status == 200:
                         user_input["api_key"] = clean_key

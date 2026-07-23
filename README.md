@@ -9,7 +9,7 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 ## ⚡ Schnell-Überblick
 
-* 🍷 **Findet Events:** Weinfeste, Kirchweihen, Open-Air-Konzerte, Märkte & Festivals.
+* 🍷 **Findet Events:** Konzerte, Festivals, Märkte, Stadtfeste, Kulturveranstaltungen & mehr.
 * 📍 **Weltweit & Exakt:** Funktioniert in jedem Land mit genauer GPS-Verortung.
 * 💸 **100% Kostenlos:** Unterstützt kostenlose KI-APIs (Groq, Google Gemini).
 * 🗺️ **Karten-Integration:** Zeigt Events als Stecknadeln inklusive Details (Uhrzeit, Preis, Beschreibung).
@@ -23,7 +23,7 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HACS einzubinden:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)]([https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration](https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration))
 
 ---
 
@@ -32,7 +32,7 @@ Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HA
 1. Öffne **HACS** in Home Assistant.
 2. Klicke oben rechts auf die **3 Punkte** ➔ **Benutzerdefinierte Repositories**.
 3. Füge folgende Repository-URL ein:
-   `https://github.com/Dealwirth/universal_ai_events`
+   `[https://github.com/Dealwirth/universal_ai_events](https://github.com/Dealwirth/universal_ai_events)`
 4. Wähle als Kategorie **Integration** aus und klicke auf **Hinzufügen**.
 5. Klicke auf **Herunterladen** und starte Home Assistant neu.
 
@@ -47,7 +47,7 @@ Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HA
    * **API Key:** Dein kostenloser Key
    * **Ort & Land:** z. B. `Berlin`, `Germany`
    * **Radius:** z. B. `30` (km)
-   * **Kriterien:** `Weinfest, Kirchweih, Rock, Open Air, Markt`
+   * **Kriterien:** `Festival, Concert, Market, Open Air, Rock`
 
 ---
 

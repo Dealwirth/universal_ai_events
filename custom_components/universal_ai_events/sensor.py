@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
 
-# Aktualisierung alle 12 Stunden (schont das API-Limit)
+# Automatische Aktualisierung alle 12 Stunden
 SCAN_INTERVAL = timedelta(hours=12)
 
 
@@ -58,25 +58,25 @@ class UniversalEventSensor(SensorEntity):
         _LOGGER.info("Starting AI Event search...")
         
         provider = self._config.get("api_provider", "groq")
-        api_key = self._config.get("api_key")
+        api_key = str(self._config.get("api_key", "")).strip()
         location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
         radius = self._config.get("radius_km", 30)
-        criteria = self._config.get("criteria", "Festival, Concert, Market, Open Air")
+        criteria = self._config.get("criteria", "Festival, Konzert, Markt, Kirchweih, Fest")
         lang = self._config.get("language", "Deutsch")
 
         if not api_key:
-            _LOGGER.error("AI Event Finder: Kein API Key konfiguriert!")
+            _LOGGER.error("AI Event Finder: Kein API Key hinterlegt!")
             return
 
         prompt = (
-            f"Search for public upcoming events in the next 7 days within a {radius} km radius "
-            f"around {location} in {country}.\n"
-            f"Filter Criteria / Keywords: {criteria}.\n"
-            f"Respond in language: {lang}.\n"
-            "Return ONLY a raw JSON array of objects. Do NOT wrap in markdown tags like ```json.\n"
-            "Each object must have these fields:\n"
-            "id (unique string), title, date, time, location_name, city, category, description, price, url."
+            f"Suche nach öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
+            f"im Umkreis von {radius} km um {location} ({country}).\n"
+            f"Kriterien/Kategorien: {criteria}.\n"
+            f"Antworte ausschließlich auf {lang}.\n"
+            "Gib NUR ein valides JSON-Array von Objekten zurück. Kein Markdown (keine ```json Tags).\n"
+            "Jedes Objekt MUSS folgende Felder enthalten:\n"
+            "id (eindeutiger String), title, date, time, location_name, city, category, description, price, url."
         )
 
         session = async_get_clientsession(self.hass)
@@ -84,9 +84,10 @@ class UniversalEventSensor(SensorEntity):
 
         try:
             if provider == "groq":
+                # Echter, sauberer URL-String OHNE Markdown-Klammern
                 endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
                 headers = {
-                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
                 payload = {
@@ -94,28 +95,28 @@ class UniversalEventSensor(SensorEntity):
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Groq HTTP Response Code: %s", r.status)
+                    _LOGGER.info("Groq HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Groq API Fehler (Status %s): %s", r.status, res_json)
                         return
                     raw_response = res_json["choices"][0]["message"]["content"]
-            
+
             elif provider == "gemini":
-                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key.strip()}"
+                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 async with session.post(endpoint, json=payload, timeout=30) as r:
-                    _LOGGER.info("Gemini HTTP Response Code: %s", r.status)
+                    _LOGGER.info("Gemini HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
                         return
                     raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
-                    
+
             elif provider == "perplexity":
                 endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
                 headers = {
-                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json"
                 }
                 payload = {
@@ -123,7 +124,7 @@ class UniversalEventSensor(SensorEntity):
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Perplexity HTTP Response Code: %s", r.status)
+                    _LOGGER.info("Perplexity HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Perplexity API Fehler (Status %s): %s", r.status, res_json)
@@ -135,7 +136,7 @@ class UniversalEventSensor(SensorEntity):
             return
 
         if not raw_response:
-            _LOGGER.warning("Keine Antwort von KI erhalten.")
+            _LOGGER.warning("Keine Antwort von der KI erhalten.")
             return
 
         try:
@@ -147,6 +148,6 @@ class UniversalEventSensor(SensorEntity):
                 self._attr_native_value = len(self._events_list)
                 _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
             else:
-                _LOGGER.error("Kein JSON-Array in KI-Antwort gefunden: %s", raw_response)
+                _LOGGER.error("Kein gültiges JSON-Array in KI-Antwort gefunden: %s", raw_response[:200])
         except Exception as e:
             _LOGGER.error("JSON Parse Fehler: %s", e)

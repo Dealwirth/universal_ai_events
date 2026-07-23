@@ -9,7 +9,7 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 ## ⚡ Schnell-Überblick
 
-* 🍷 **Findet Events:** Konzerte, Festivals, Märkte, Stadtfeste, Kulturveranstaltungen & mehr.
+* 🍷 **Findet Events:** Weinfeste, Kirchweihen, Open-Air-Konzerte, Märkte & Festivals.
 * 📍 **Weltweit & Exakt:** Funktioniert in jedem Land mit genauer GPS-Verortung.
 * 💸 **100% Kostenlos:** Unterstützt kostenlose KI-APIs (Groq, Google Gemini).
 * 🗺️ **Karten-Integration:** Zeigt Events als Stecknadeln inklusive Details (Uhrzeit, Preis, Beschreibung).
@@ -21,9 +21,9 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 ### Option 1: Direkt zu HACS hinzufügen (Empfohlen)
 
-Klicke auf diesen Button, um das Repository direkt zu deinem Home Assistant / HACS hinzuzufügen:
+Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HACS einzubinden:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=https%3A%2F%2Fgithub.com%2FDealwirth%2Funiversal_ai_events&category=Integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration)
 
 ---
 
@@ -47,7 +47,7 @@ Klicke auf diesen Button, um das Repository direkt zu deinem Home Assistant / HA
    * **API Key:** Dein kostenloser Key
    * **Ort & Land:** z. B. `Berlin`, `Germany`
    * **Radius:** z. B. `30` (km)
-   * **Kriterien:** `Festival, Concert, Market, Open Air, Rock`
+   * **Kriterien:** `Weinfest, Kirchweih, Rock, Open Air, Markt`
 
 ---
 

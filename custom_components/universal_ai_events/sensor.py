@@ -9,7 +9,6 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_time_interval
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,7 +38,6 @@ class UniversalEventSensor(SensorEntity):
         self._attr_icon = "mdi:calendar-search"
         self._attr_native_value = 0
         self._events_list = []
-        self._extra_attributes = {}
 
     @property
     def extra_state_attributes(self) -> dict:
@@ -49,11 +47,12 @@ class UniversalEventSensor(SensorEntity):
             "events": self._events_list,
             "location": self._config.get("location"),
             "radius_km": self._config.get("radius_km"),
+            "provider_used": self._config.get("api_provider"),
         }
 
     async def async_update(self) -> None:
         """Fetch events dynamically via chosen AI provider."""
-        _LOGGER.info("Updating AI Events sensor...")
+        _LOGGER.info("Starting AI Event search...")
         
         provider = self._config.get("api_provider", "groq")
         api_key = self._config.get("api_key")
@@ -62,6 +61,10 @@ class UniversalEventSensor(SensorEntity):
         radius = self._config.get("radius_km", 30)
         criteria = self._config.get("criteria", "Festival, Concert, Market, Open Air")
         lang = self._config.get("language", "Deutsch")
+
+        if not api_key:
+            _LOGGER.error("AI Event Finder: Kein API Key konfiguriert!")
+            return
 
         prompt = (
             f"Search for public upcoming events in the next 7 days within a {radius} km radius "
@@ -74,8 +77,8 @@ class UniversalEventSensor(SensorEntity):
         )
 
         session = async_get_clientsession(self.hass)
-
         raw_response = None
+
         try:
             if provider == "groq":
                 endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
@@ -85,14 +88,22 @@ class UniversalEventSensor(SensorEntity):
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    _LOGGER.info("Groq HTTP Status: %s", r.status)
                     res_json = await r.json()
+                    if r.status != 200:
+                        _LOGGER.error("Groq API Fehler Antwort: %s", res_json)
+                        return
                     raw_response = res_json["choices"][0]["message"]["content"]
             
             elif provider == "gemini":
                 endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 async with session.post(endpoint, json=payload, timeout=30) as r:
+                    _LOGGER.info("Gemini HTTP Status: %s", r.status)
                     res_json = await r.json()
+                    if r.status != 200:
+                        _LOGGER.error("Gemini API Fehler Antwort: %s", res_json)
+                        return
                     raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     
             elif provider == "perplexity":
@@ -103,21 +114,32 @@ class UniversalEventSensor(SensorEntity):
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    _LOGGER.info("Perplexity HTTP Status: %s", r.status)
                     res_json = await r.json()
+                    if r.status != 200:
+                        _LOGGER.error("Perplexity API Fehler Antwort: %s", res_json)
+                        return
                     raw_response = res_json["choices"][0]["message"]["content"]
+
         except Exception as err:
-            _LOGGER.error("API error for provider %s: %s", provider, err)
+            _LOGGER.error("Netzwerk-/API-Fehler bei %s: %s", provider, err)
             return
 
         if not raw_response:
+            _LOGGER.warning("Leere Antwort von KI erhalten.")
             return
+
+        _LOGGER.info("KI Antworten Rohtext: %s", raw_response[:300])
 
         try:
             start = raw_response.find("[")
             end = raw_response.rfind("]") + 1
-            if start != -1 and end != 0:
+            if start != -1 and end > start:
                 clean_json = raw_response[start:end]
                 self._events_list = json.loads(clean_json)
                 self._attr_native_value = len(self._events_list)
+                _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
+            else:
+                _LOGGER.error("Kein gültiges JSON-Array '[' ']' in der KI-Antwort gefunden.")
         except Exception as e:
-            _LOGGER.error("Failed to parse AI response JSON: %s", e)
+            _LOGGER.error("JSON-Parse-Fehler: %s. Rohtext war: %s", e, raw_response)

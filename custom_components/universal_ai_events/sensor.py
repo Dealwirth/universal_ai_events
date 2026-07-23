@@ -17,6 +17,8 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 SCAN_INTERVAL = timedelta(hours=12)
 
+API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -58,7 +60,7 @@ class UniversalEventSensor(SensorEntity):
 
     async def async_update(self) -> None:
         """Fetch events dynamically via Google Gemini with Web Grounding."""
-        _LOGGER.info("Gestarte KI-Event-Suche für %s...", self._config.get("location"))
+        _LOGGER.info("Gestartete KI-Event-Suche für %s...", self._config.get("location"))
         
         api_key = str(self._config.get("api_key", "")).strip()
 
@@ -83,9 +85,7 @@ class UniversalEventSensor(SensorEntity):
         )
 
         session = async_get_clientsession(self.hass)
-
-        # Sichere URL-Generierung via yarl.URL (verhindert Formatierungsfehler)
-        target_url = URL("[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)").with_query({"key": api_key})
+        target_url = URL(API_ENDPOINT).with_query({"key": api_key})
 
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
@@ -112,9 +112,7 @@ class UniversalEventSensor(SensorEntity):
             _LOGGER.error("Netzwerkfehler beim Aufrufen von Gemini: %s", err)
             return
 
-        # Extrem sicherer JSON-Parser
         try:
-            # Entfernt evtl. mitgelieferte Markdown-Tags wie ```json ... ```
             clean_text = re.sub(r"```(?:json)?", "", raw_response).strip()
             
             start = clean_text.find("[")

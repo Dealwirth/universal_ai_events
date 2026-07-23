@@ -14,7 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
 
-# UPDATE NUR ALLE 12 STUNDEN (verhindert API-Sperren)
+# Aktualisierung alle 12 Stunden (schont das API-Limit)
 SCAN_INTERVAL = timedelta(hours=12)
 
 
@@ -66,7 +66,7 @@ class UniversalEventSensor(SensorEntity):
         lang = self._config.get("language", "Deutsch")
 
         if not api_key:
-            _LOGGER.error("AI Event Finder: Kein API Key angegeben!")
+            _LOGGER.error("AI Event Finder: Kein API Key konfiguriert!")
             return
 
         prompt = (
@@ -85,12 +85,16 @@ class UniversalEventSensor(SensorEntity):
         try:
             if provider == "groq":
                 endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
-                headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
+                headers = {
+                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Content-Type": "application/json"
+                }
                 payload = {
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    _LOGGER.info("Groq HTTP Response Code: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Groq API Fehler (Status %s): %s", r.status, res_json)
@@ -101,6 +105,7 @@ class UniversalEventSensor(SensorEntity):
                 endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key.strip()}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 async with session.post(endpoint, json=payload, timeout=30) as r:
+                    _LOGGER.info("Gemini HTTP Response Code: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
@@ -109,12 +114,16 @@ class UniversalEventSensor(SensorEntity):
                     
             elif provider == "perplexity":
                 endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
-                headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
+                headers = {
+                    "Authorization": f"Bearer {api_key.strip()}",
+                    "Content-Type": "application/json"
+                }
                 payload = {
                     "model": "sonar",
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                    _LOGGER.info("Perplexity HTTP Response Code: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
                         _LOGGER.error("Perplexity API Fehler (Status %s): %s", r.status, res_json)
@@ -126,6 +135,7 @@ class UniversalEventSensor(SensorEntity):
             return
 
         if not raw_response:
+            _LOGGER.warning("Keine Antwort von KI erhalten.")
             return
 
         try:
@@ -135,8 +145,8 @@ class UniversalEventSensor(SensorEntity):
                 clean_json = raw_response[start:end]
                 self._events_list = json.loads(clean_json)
                 self._attr_native_value = len(self._events_list)
-                _LOGGER.info("Erfolgreich %s Events für %s geladen!", len(self._events_list), location)
+                _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
             else:
-                _LOGGER.error("Kein JSON-Array in der Antwort gefunden: %s", raw_response)
+                _LOGGER.error("Kein JSON-Array in KI-Antwort gefunden: %s", raw_response)
         except Exception as e:
-            _LOGGER.error("JSON Parse Error: %s", e)
+            _LOGGER.error("JSON Parse Fehler: %s", e)

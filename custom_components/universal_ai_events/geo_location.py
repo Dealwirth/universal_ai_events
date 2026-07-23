@@ -5,7 +5,7 @@ import json
 import math
 import aiohttp
 
-from homeassistant.components.geolocation import GeolocationEntity
+from homeassistant.components.geo_location import GeolocationEntity
 from homeassistant.helpers.event import async_track_time_interval
 
 _LOGGER = logging.getLogger(__name__)
@@ -17,7 +17,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     config = entry.data
     updater = UniversalEventDataUpdater(hass, async_add_entities, config)
     
-    # Erstes Update asynchron ausführen
     await updater.async_update()
     
     interval = timedelta(hours=config.get("update_hours", 24))

@@ -3,9 +3,9 @@
   "name": "Universal AI Event Finder",
   "codeowners": ["@dein-github-name"],
   "config_flow": true,
-  "documentation": "https://github.com/dein-github-name/universal_ai_events",
+  "documentation": "[https://github.com/dein-github-name/universal_ai_events](https://github.com/dein-github-name/universal_ai_events)",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/dein-github-name/universal_ai_events/issues",
-  "version": "1.1.0",
-  "icon": "/local/icon/event.png"
+  "issue_tracker": "[https://github.com/dein-github-name/universal_ai_events/issues](https://github.com/dein-github-name/universal_ai_events/issues)",
+  "version": "1.2.0",
+  "icon": "mdi:calendar-search"
 }

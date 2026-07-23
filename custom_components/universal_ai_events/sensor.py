@@ -1,9 +1,10 @@
-"""Support for Universal AI Events sensor with Google Gemini."""
+"""Support for Universal AI Events sensor powered strictly by Google Gemini."""
 from __future__ import annotations
 
 from datetime import timedelta
 import json
 import logging
+import re
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
@@ -28,14 +29,13 @@ async def async_setup_entry(
 
 
 class UniversalEventSensor(SensorEntity):
-    """Representation of the AI Events Sensor."""
+    """Representation of the Gemini AI Events Sensor."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry, config: dict):
         self.hass = hass
         self._entry = entry
         self._config = config
         
-        # Generiert einen festen Slug als Entity Name
         loc_slug = config.get("location", "gerolzhofen").lower().replace(" ", "_")
         self.entity_id = f"sensor.events_{loc_slug}"
         self._attr_name = f"Events {config.get('location', 'Gerolzhofen')}"
@@ -52,15 +52,17 @@ class UniversalEventSensor(SensorEntity):
             "events": self._events_list,
             "location": self._config.get("location"),
             "radius_km": self._config.get("radius_km"),
-            "provider_used": self._config.get("api_provider"),
+            "provider_used": "Google Gemini (Live Search)",
         }
 
     async def async_update(self) -> None:
         """Fetch events dynamically via Google Gemini with Web Grounding."""
-        _LOGGER.info("Starting AI Event search...")
+        _LOGGER.info("Gezielte KI-Event-Suche via Google Gemini wird gestartet...")
         
-        provider = self._config.get("api_provider", "gemini")
-        api_key = str(self._config.get("api_key", "")).strip()
+        # 1. API Key strikt bereinigen (entfernt Klammern [], (), Leerzeichen, Anführungszeichen)
+        raw_key = str(self._config.get("api_key", ""))
+        api_key = re.sub(r"[\[\]\(\)\"'\s]", "", raw_key).strip()
+
         location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
         radius = self._config.get("radius_km", 30)
@@ -68,53 +70,51 @@ class UniversalEventSensor(SensorEntity):
         lang = self._config.get("language", "Deutsch")
 
         if not api_key:
-            _LOGGER.error("AI Event Finder: Kein API Key hinterlegt!")
+            _LOGGER.error("Universal AI Event Finder: Kein gültiger Gemini API-Key hinterlegt!")
             return
 
         prompt = (
-            f"Durchsuche das Internet nach öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
+            f"Durchsuche das Internet nach aktuellen öffentlichen Veranstaltungen und Events in den nächsten 7 Tagen "
             f"im Umkreis von {radius} km um {location} ({country}).\n"
             f"Kriterien/Kategorien: {criteria}.\n"
             f"Antworte ausschließlich auf {lang}.\n"
-            "Gib NUR ein valides JSON-Array von Objekten zurück. Kein Markdown (keine ```json Tags).\n"
-            "Jedes Objekt MUSS folgende Felder enthalten:\n"
+            "Gib NUR ein valides JSON-Array von Objekten zurück. Verwende keinerlei Markdown-Formatierung wie ```json.\n"
+            "Jedes Objekt MUSS folgende Felder haben:\n"
             "id, title, date, time, location_name, city, category, description, price, url."
         )
 
         session = async_get_clientsession(self.hass)
-        raw_response = None
 
         try:
-            if provider == "gemini":
-                # Saubere API-URL ohne Klammern oder Anführungszeichen-Salat
-                clean_key = api_key.replace("[", "").replace("]", "").replace("(", "").replace(")", "").strip()
-                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){clean_key}"
+            # Reiner Endpoint ohne Klammern-Gefahr
+            endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=){api_key}"
+            
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                # Google Search Retrieval aktiviert den Zugriff auf das Live-Web
+                "tools": [{"google_search_retrieval": {}}]
+            }
+            
+            async with session.post(endpoint, json=payload, timeout=45) as r:
+                _LOGGER.info("Gemini HTTP Status-Code: %s", r.status)
+                res_json = await r.json()
                 
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    # Aktiviert die Live-Google-Suche
-                    "tools": [{"google_search_retrieval": {}}]
-                }
+                if r.status != 200:
+                    _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
+                    return
                 
-                async with session.post(endpoint, json=payload, timeout=45) as r:
-                    _LOGGER.info("Gemini HTTP Status: %s", r.status)
-                    res_json = await r.json()
+                candidates = res_json.get("candidates", [])
+                if not candidates:
+                    _LOGGER.warning("Gemini hat keine Treffer/Antworten geliefert.")
+                    return
                     
-                    if r.status != 200:
-                        _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
-                        return
-                    
-                    # Antwort extrahieren
-                    raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                raw_response = candidates[0]["content"]["parts"][0]["text"]
 
         except Exception as err:
-            _LOGGER.error("Netzwerk-/API-Fehler bei %s: %s", provider, err)
+            _LOGGER.error("Netzwerk- oder API-Fehler bei Gemini: %s", err)
             return
 
-        if not raw_response:
-            _LOGGER.warning("Keine Antwort von Gemini erhalten.")
-            return
-
+        # 2. JSON-Array aus dem Antworttext filtern
         try:
             start = raw_response.find("[")
             end = raw_response.rfind("]") + 1
@@ -122,8 +122,8 @@ class UniversalEventSensor(SensorEntity):
                 clean_json = raw_response[start:end]
                 self._events_list = json.loads(clean_json)
                 self._attr_native_value = len(self._events_list)
-                _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
+                _LOGGER.info("Erfolgreich %s Events für %s geladen!", len(self._events_list), location)
             else:
-                _LOGGER.error("Kein gültiges JSON-Array in Antwort gefunden: %s", raw_response[:200])
+                _LOGGER.error("Kein JSON-Array in der Gemini-Antwort gefunden: %s", raw_response[:200])
         except Exception as e:
-            _LOGGER.error("JSON Parse Fehler: %s", e)
+            _LOGGER.error("JSON-Parse-Fehler: %s", e)

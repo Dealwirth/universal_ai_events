@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 SCAN_INTERVAL = timedelta(hours=12)
 
-API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
 
 async def async_setup_entry(

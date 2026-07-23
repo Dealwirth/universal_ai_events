@@ -5,7 +5,7 @@ import json
 import math
 import aiohttp
 
-from homeassistant.components.geo_location import GeolocationEntity
+from homeassistant.components.geolocation import GeolocationEntity
 from homeassistant.helpers.event import async_track_time_interval
 
 _LOGGER = logging.getLogger(__name__)

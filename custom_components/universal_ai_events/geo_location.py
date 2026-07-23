@@ -1,8 +1,9 @@
 """Support for Geolocation entities for Local Events worldwide."""
 from datetime import timedelta
 import logging
-import requests
 import json
+import math
+import aiohttp
 
 from homeassistant.components.geo_location import GeolocationEntity
 from homeassistant.helpers.event import async_track_time_interval
@@ -15,6 +16,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the event entities."""
     config = entry.data
     updater = UniversalEventDataUpdater(hass, async_add_entities, config)
+    
+    # Erstes Update asynchron ausführen
     await updater.async_update()
     
     interval = timedelta(hours=config.get("update_hours", 24))
@@ -29,21 +32,22 @@ class UniversalEventDataUpdater:
         self.async_add_entities = async_add_entities
         self.config = config
         self.entities = {}
-        self.center_lat, self.center_lon = self._geocode_location(
-            config.get("location"), config.get("country")
-        )
+        # Default Fallback: Berlin, Germany
+        self.center_lat = 52.5200
+        self.center_lon = 13.4050
 
-    def _geocode_location(self, location, country):
+    async def _geocode_location(self, session, location, country):
         """Find center coordinates globally using Nominatim/OpenStreetMap."""
         try:
             url = f"https://nominatim.openstreetmap.org/search?q={location},{country}&format=json&limit=1"
             headers = {"User-Agent": "HomeAssistantUniversalEventFinder/1.0"}
-            resp = requests.get(url, headers=headers, timeout=10).json()
-            if resp:
-                return float(resp[0]["lat"]), float(resp[0]["lon"])
+            async with session.get(url, headers=headers, timeout=10) as resp:
+                data = await resp.json()
+                if data:
+                    return float(data[0]["lat"]), float(data[0]["lon"])
         except Exception as e:
             _LOGGER.warning("Geocoding failed, falling back to defaults: %s", e)
-        return 49.8986, 10.3489 # Default Fallback
+        return 52.5200, 13.4050
 
     async def async_update(self, _=None):
         """Fetch events dynamically via chosen AI provider."""
@@ -51,10 +55,10 @@ class UniversalEventDataUpdater:
         
         provider = self.config.get("api_provider", "groq")
         api_key = self.config.get("api_key")
-        location = self.config.get("location")
-        country = self.config.get("country")
-        radius = self.config.get("radius_km")
-        criteria = self.config.get("criteria")
+        location = self.config.get("location", "Berlin")
+        country = self.config.get("country", "Germany")
+        radius = self.config.get("radius_km", 30)
+        criteria = self.config.get("criteria", "Festival, Concert, Market, Open Air")
         lang = self.config.get("language", "Deutsch")
 
         prompt = (
@@ -68,7 +72,11 @@ class UniversalEventDataUpdater:
             "category, description, price, url."
         )
 
-        def fetch():
+        async with aiohttp.ClientSession() as session:
+            # Geocode center location
+            self.center_lat, self.center_lon = await self._geocode_location(session, location, country)
+
+            raw_response = None
             try:
                 if provider == "groq":
                     endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
@@ -77,15 +85,17 @@ class UniversalEventDataUpdater:
                         "model": "llama-3.3-70b-versatile",
                         "messages": [{"role": "user", "content": prompt}]
                     }
-                    r = requests.post(endpoint, json=payload, headers=headers, timeout=30)
-                    return r.json()["choices"][0]["message"]["content"]
+                    async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                        res_json = await r.json()
+                        raw_response = res_json["choices"][0]["message"]["content"]
                 
                 elif provider == "gemini":
                     endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
                     payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                    r = requests.post(endpoint, json=payload, timeout=30)
-                    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    
+                    async with session.post(endpoint, json=payload, timeout=30) as r:
+                        res_json = await r.json()
+                        raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
+                        
                 elif provider == "perplexity":
                     endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -93,49 +103,48 @@ class UniversalEventDataUpdater:
                         "model": "sonar",
                         "messages": [{"role": "user", "content": prompt}]
                     }
-                    r = requests.post(endpoint, json=payload, headers=headers, timeout=30)
-                    return r.json()["choices"][0]["message"]["content"]
+                    async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
+                        res_json = await r.json()
+                        raw_response = res_json["choices"][0]["message"]["content"]
             except Exception as err:
                 _LOGGER.error("API error for %s: %s", provider, err)
-                return None
+                return
 
-        raw_response = await self.hass.async_add_executor_job(fetch)
-        if not raw_response:
-            return
+            if not raw_response:
+                return
 
-        try:
-            start = raw_response.find("[")
-            end = raw_response.rfind("]") + 1
-            if start != -1 and end != 0:
-                clean_json = raw_response[start:end]
-                events = json.loads(clean_json)
+            try:
+                start = raw_response.find("[")
+                end = raw_response.rfind("]") + 1
+                if start != -1 and end != 0:
+                    clean_json = raw_response[start:end]
+                    events = json.loads(clean_json)
 
-                new_entities = []
-                for ev in events:
-                    event_id = str(ev.get("id", ev.get("title")))
-                    
-                    # Missing Coordinates? Fix with OpenStreetMap Nominatim
-                    lat = ev.get("latitude")
-                    lon = ev.get("longitude")
-                    if not lat or not lon:
-                        loc_str = f"{ev.get('location_name', '')} {ev.get('city', location)}"
-                        lat, lon = self._geocode_location(loc_str, country)
+                    new_entities = []
+                    for ev in events:
+                        event_id = str(ev.get("id", ev.get("title")))
+                        
+                        lat = ev.get("latitude")
+                        lon = ev.get("longitude")
+                        if not lat or not lon:
+                            loc_str = f"{ev.get('location_name', '')} {ev.get('city', location)}"
+                            lat, lon = await self._geocode_location(session, loc_str, country)
 
-                    ev["latitude"] = lat
-                    ev["longitude"] = lon
+                        ev["latitude"] = lat
+                        ev["longitude"] = lon
 
-                    if event_id not in self.entities:
-                        entity = UniversalEventEntity(ev, self.center_lat, self.center_lon)
-                        self.entities[event_id] = entity
-                        new_entities.append(entity)
-                    else:
-                        self.entities[event_id].update_data(ev)
+                        if event_id not in self.entities:
+                            entity = UniversalEventEntity(ev, self.center_lat, self.center_lon)
+                            self.entities[event_id] = entity
+                            new_entities.append(entity)
+                        else:
+                            self.entities[event_id].update_data(ev)
 
-                if new_entities:
-                    self.async_add_entities(new_entities)
+                    if new_entities:
+                        self.async_add_entities(new_entities)
 
-        except Exception as e:
-            _LOGGER.error("Failed to parse AI response JSON: %s", e)
+            except Exception as e:
+                _LOGGER.error("Failed to parse AI response JSON: %s", e)
 
 
 class UniversalEventEntity(GeolocationEntity):
@@ -174,7 +183,6 @@ class UniversalEventEntity(GeolocationEntity):
         return "mdi:calendar-star"
 
     def _calc_distance(self, lat, lon):
-        import math
         dlat = math.radians(lat - self.center_lat)
         dlon = math.radians(lon - self.center_lon)
         a = math.sin(dlat/2)**2 + math.cos(math.radians(self.center_lat)) * math.cos(math.radians(lat)) * math.sin(dlon/2)**2

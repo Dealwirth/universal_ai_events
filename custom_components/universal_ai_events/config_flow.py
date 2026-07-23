@@ -11,6 +11,9 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 
+API_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Universal AI Event Finder."""
 
@@ -21,15 +24,14 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Säubere den Key strikt von allen unsichtbaren Zeichen/Leerschritten
             clean_key = str(user_input.get("api_key", "")).strip()
 
-            # API Key Test-Aufruf
             session = async_get_clientsession(self.hass)
-            test_url = URL("[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)").with_query({"key": clean_key})
+            test_url = URL(API_ENDPOINT).with_query({"key": clean_key})
             
             try:
-                async with session.post(test_url, json={"contents": [{"parts": [{"text": "Ping"}]}]}, timeout=10) as resp:
+                payload = {"contents": [{"parts": [{"text": "Ping"}]}]}
+                async with session.post(test_url, json=payload, timeout=15) as resp:
                     if resp.status == 200:
                         user_input["api_key"] = clean_key
                         return self.async_create_entry(
@@ -37,7 +39,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             data=user_input
                         )
                     else:
-                        _LOGGER.error("API Key Validierung fehlgeschlagen: HTTP %s", resp.status)
+                        err_txt = await resp.text()
+                        _LOGGER.error("API Key Validierung fehlgeschlagen HTTP %s: %s", resp.status, err_txt)
                         errors["base"] = "invalid_api_key"
             except Exception as e:
                 _LOGGER.error("Verbindungsfehler bei Key-Prüfung: %s", e)

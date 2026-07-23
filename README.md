@@ -21,9 +21,9 @@ Ein KI-gestütztes Home-Assistant-Plugin, das automatisch **öffentliche Events 
 
 ### Option 1: Direkt zu HACS hinzufügen (Empfohlen)
 
-Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HACS einzubinden:
+Klicke auf diesen Button, um das Repository direkt zu deinem Home Assistant / HACS hinzuzufügen:
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)]([https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration](https://my.home-assistant.io/redirect/hacs_repository/?owner=Dealwirth&repository=universal_ai_events&category=integration))
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?repository=https%3A%2F%2Fgithub.com%2FDealwirth%2Funiversal_ai_events&category=Integration)
 
 ---
 
@@ -32,7 +32,7 @@ Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HA
 1. Öffne **HACS** in Home Assistant.
 2. Klicke oben rechts auf die **3 Punkte** ➔ **Benutzerdefinierte Repositories**.
 3. Füge folgende Repository-URL ein:
-   `[https://github.com/Dealwirth/universal_ai_events](https://github.com/Dealwirth/universal_ai_events)`
+   `https://github.com/Dealwirth/universal_ai_events`
 4. Wähle als Kategorie **Integration** aus und klicke auf **Hinzufügen**.
 5. Klicke auf **Herunterladen** und starte Home Assistant neu.
 

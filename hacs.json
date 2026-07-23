@@ -1,4 +1,5 @@
 {
   "name": "Universal AI Event Finder",
-  "render_readme": true
+  "render_readme": true,
+  "filename": "icon.png"
 }

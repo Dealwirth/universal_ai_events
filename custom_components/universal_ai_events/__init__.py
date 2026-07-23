@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
-PLATFORMS: list[Platform] = [Platform.GEO_LOCATION]
+PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Universal AI Event Finder from a config entry."""

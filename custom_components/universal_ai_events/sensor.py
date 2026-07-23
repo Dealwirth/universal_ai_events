@@ -14,6 +14,9 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "universal_ai_events"
 
+# UPDATE NUR ALLE 12 STUNDEN (verhindert API-Sperren)
+SCAN_INTERVAL = timedelta(hours=12)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -56,14 +59,14 @@ class UniversalEventSensor(SensorEntity):
         
         provider = self._config.get("api_provider", "groq")
         api_key = self._config.get("api_key")
-        location = self._config.get("location", "Berlin")
+        location = self._config.get("location", "Gerolzhofen")
         country = self._config.get("country", "Germany")
         radius = self._config.get("radius_km", 30)
         criteria = self._config.get("criteria", "Festival, Concert, Market, Open Air")
         lang = self._config.get("language", "Deutsch")
 
         if not api_key:
-            _LOGGER.error("AI Event Finder: Kein API Key konfiguriert!")
+            _LOGGER.error("AI Event Finder: Kein API Key angegeben!")
             return
 
         prompt = (
@@ -82,42 +85,39 @@ class UniversalEventSensor(SensorEntity):
         try:
             if provider == "groq":
                 endpoint = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
                 payload = {
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Groq HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
-                        _LOGGER.error("Groq API Fehler Antwort: %s", res_json)
+                        _LOGGER.error("Groq API Fehler (Status %s): %s", r.status, res_json)
                         return
                     raw_response = res_json["choices"][0]["message"]["content"]
             
             elif provider == "gemini":
-                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key}"
+                endpoint = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=){api_key.strip()}"
                 payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 async with session.post(endpoint, json=payload, timeout=30) as r:
-                    _LOGGER.info("Gemini HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
-                        _LOGGER.error("Gemini API Fehler Antwort: %s", res_json)
+                        _LOGGER.error("Gemini API Fehler (Status %s): %s", r.status, res_json)
                         return
                     raw_response = res_json["candidates"][0]["content"]["parts"][0]["text"]
                     
             elif provider == "perplexity":
                 endpoint = "[https://api.perplexity.ai/chat/completions](https://api.perplexity.ai/chat/completions)"
-                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                headers = {"Authorization": f"Bearer {api_key.strip()}", "Content-Type": "application/json"}
                 payload = {
                     "model": "sonar",
                     "messages": [{"role": "user", "content": prompt}]
                 }
                 async with session.post(endpoint, json=payload, headers=headers, timeout=30) as r:
-                    _LOGGER.info("Perplexity HTTP Status: %s", r.status)
                     res_json = await r.json()
                     if r.status != 200:
-                        _LOGGER.error("Perplexity API Fehler Antwort: %s", res_json)
+                        _LOGGER.error("Perplexity API Fehler (Status %s): %s", r.status, res_json)
                         return
                     raw_response = res_json["choices"][0]["message"]["content"]
 
@@ -126,10 +126,7 @@ class UniversalEventSensor(SensorEntity):
             return
 
         if not raw_response:
-            _LOGGER.warning("Leere Antwort von KI erhalten.")
             return
-
-        _LOGGER.info("KI Antworten Rohtext: %s", raw_response[:300])
 
         try:
             start = raw_response.find("[")
@@ -138,8 +135,8 @@ class UniversalEventSensor(SensorEntity):
                 clean_json = raw_response[start:end]
                 self._events_list = json.loads(clean_json)
                 self._attr_native_value = len(self._events_list)
-                _LOGGER.info("Erfolgreich %s Events geladen!", len(self._events_list))
+                _LOGGER.info("Erfolgreich %s Events für %s geladen!", len(self._events_list), location)
             else:
-                _LOGGER.error("Kein gültiges JSON-Array '[' ']' in der KI-Antwort gefunden.")
+                _LOGGER.error("Kein JSON-Array in der Antwort gefunden: %s", raw_response)
         except Exception as e:
-            _LOGGER.error("JSON-Parse-Fehler: %s. Rohtext war: %s", e, raw_response)
+            _LOGGER.error("JSON Parse Error: %s", e)

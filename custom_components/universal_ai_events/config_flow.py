@@ -1,10 +1,14 @@
 """Config flow for Universal AI Event Finder (Gemini Only)."""
 from __future__ import annotations
 
+import logging
+from yarl import URL
 import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.core import callback
 
+from homeassistant import config_entries
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+_LOGGER = logging.getLogger(__name__)
 DOMAIN = "universal_ai_events"
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -17,16 +21,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Bereinige den API-Key von versehentlichen Zeichen
-            clean_key = user_input.get("api_key", "").strip()
-            if not clean_key:
-                errors["base"] = "invalid_api_key"
-            else:
-                user_input["api_key"] = clean_key
-                return self.async_create_entry(
-                    title=f"Events {user_input.get('location', 'Local')}",
-                    data=user_input
-                )
+            # Säubere den Key strikt von allen unsichtbaren Zeichen/Leerschritten
+            clean_key = str(user_input.get("api_key", "")).strip()
+
+            # API Key Test-Aufruf
+            session = async_get_clientsession(self.hass)
+            test_url = URL("[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent)").with_query({"key": clean_key})
+            
+            try:
+                async with session.post(test_url, json={"contents": [{"parts": [{"text": "Ping"}]}]}, timeout=10) as resp:
+                    if resp.status == 200:
+                        user_input["api_key"] = clean_key
+                        return self.async_create_entry(
+                            title=f"Events {user_input.get('location', 'Gerolzhofen')}",
+                            data=user_input
+                        )
+                    else:
+                        _LOGGER.error("API Key Validierung fehlgeschlagen: HTTP %s", resp.status)
+                        errors["base"] = "invalid_api_key"
+            except Exception as e:
+                _LOGGER.error("Verbindungsfehler bei Key-Prüfung: %s", e)
+                errors["base"] = "cannot_connect"
 
         data_schema = vol.Schema({
             vol.Required("api_key"): str,

@@ -45,7 +45,7 @@ Klicke auf diesen Button, um das Repository direkt in deinen Home Assistant / HA
 3. Gib folgende Daten ein:
    * **KI-Anbieter:** `Groq` (Kostenlos) oder `Gemini`
    * **API Key:** Dein kostenloser Key
-   * **Ort & Land:** z. B. `Gerolzhofen`, `Germany`
+   * **Ort & Land:** z. B. `Berlin`, `Germany`
    * **Radius:** z. B. `30` (km)
    * **Kriterien:** `Weinfest, Kirchweih, Rock, Open Air, Markt`
 
